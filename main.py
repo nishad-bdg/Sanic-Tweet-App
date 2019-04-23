@@ -1,12 +1,19 @@
-from sanic import Sanic
+from sanic import Sanic,response
 from sanic.response import json
 from sanic.views import HTTPMethodView
 from sanic_jwt import exceptions,initialize
 from sanic_jwt.decorators import protected
+from sanic_session import Session,InMemorySessionInterface
 from sanic_openapi import swagger_blueprint
 from db import *
 import hashlib, binascii
 import os
+
+
+
+
+app = Sanic(__name__)
+session = Session(app, interface=InMemorySessionInterface())
 
 async def authenticate(request, *args, **kwargs):
     username = request.json.get('username',None)
@@ -14,17 +21,19 @@ async def authenticate(request, *args, **kwargs):
     hash_password = hashlib.sha256(str(password).encode('utf-8')).hexdigest()
 
     if not username or not password:
-        raise exceptions.AuthenticationFailed("Missing username or password")
+        raise exceptions.AuthenticationFailed("missing username or password")
     else:
         try:
             user = User.get(username = username, password = hash_password)
+            request['session']['user'] = user.username
         except:
-            raise exceptions.AuthenticationFailed("Invalid username or password")
+            raise exceptions.AuthenticationFailed("invalid username or password")
     return {"user_id": user.id}
 
 
-app = Sanic(__name__)
 initialize(app, authenticate = authenticate)
+
+
 
 class UserRegister(HTTPMethodView):
     async def post(self,request):
@@ -48,7 +57,7 @@ class UserRegister(HTTPMethodView):
 class TweetList(HTTPMethodView):
     async def get(self,request):
         tweets = []
-
+        print(request['session']['user'])
         for tweet in Tweet.select():
             tweets.append({'id': tweet.id, 'user': str(tweet.user.username), 'message': tweet.message, 'is_published': tweet.is_published, 'created': tweet.created})
         return json(tweets)
